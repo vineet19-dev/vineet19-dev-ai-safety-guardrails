@@ -1,5 +1,7 @@
 # AI Safety Guardrails
 
+> **Quick Start:** See [QUICKSTART.md](QUICKSTART.md) for a step-by-step guide to getting started.
+
 An enhanced AI safety guardrails system that detects and prevents unethical AI behaviors across multiple critical domains: **financial trading**, **gaming/esports**, **business operations**, **healthcare**, and **social platforms**.
 
 ## Overview
@@ -102,20 +104,117 @@ print(pipeline.transparency_report())
 # ...
 ```
 
-## Web Frontend + Backend
+## Web Dashboard (FastAPI + Modern UI)
 
-Run the built-in web application:
+### Quick Start - Run the Dashboard
+
+The easiest way to run the full-featured dashboard:
+
+```bash
+python run_dashboard.py
+```
+
+Or using the module directly:
+
+```bash
+python -m guardrails.api
+```
+
+Then open **http://localhost:8000** in your browser.
+
+### Features
+
+The modern web dashboard includes:
+
+- **🎨 Modern Dark Theme UI** - Professional gradient-based interface with smooth animations
+- **✨ Smooth Animations** - Fade-in, slide-in, and pulse effects throughout
+- **🔍 Safety Check** - Evaluate AI actions in real-time with instant feedback
+- **🎯 Pre-built Test Cases** - Quick buttons for common attack scenarios:
+  - 💰 Financial Fraud (Pump & Dump)
+  - 🎮 Game Exploit (Botting)
+  - 🎭 Deepfake Attack
+  - 🏥 Healthcare Fraud
+  - 📊 Insider Trading
+  - ✅ Clean Action (baseline)
+- **📊 Live Logs Panel** - Real-time action evaluation history with pulse indicator
+- **📈 Live Statistics Dashboard** - Auto-refreshing charts and metrics:
+  - Real-time stat cards (Total, Blocked, Allowed, Warnings)
+  - Doughnut chart for decision distribution
+  - Bar chart for domain distribution
+  - Updates every 5 seconds automatically
+- **🎬 Demo Mode** - Simulate multiple AI actions automatically
+- **💫 Interactive Elements** - Card hover effects, button ripples, smooth transitions
+
+### API Endpoints
+
+The FastAPI backend provides the following REST endpoints:
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/` | GET | Web dashboard (HTML) |
+| `/evaluate` | POST | Evaluate an AI action, returns structured JSON |
+| `/logs` | GET | Retrieve recent audit logs |
+| `/api/domains` | GET | List supported domains |
+| `/api/stats` | GET | Get decision/domain statistics |
+| `/api/demo-actions` | GET | Get pre-built test actions |
+| `/api/demo-mode` | POST | Run all demo actions automatically |
+| `/docs` | GET | Interactive API documentation (Swagger UI) |
+
+### API Response Format
+
+The `/evaluate` endpoint returns structured JSON:
+
+```json
+{
+  "decision": "BLOCK",
+  "domain": "financial_trading",
+  "confidence": 0.92,
+  "reason": "Front-running detected: placing orders ahead of known client orders.",
+  "law": "SEC Rule 10b-5 (Market Manipulation)",
+  "action_id": "order-001",
+  "violations": ["front_running"],
+  "severity": "critical",
+  "stakeholder_impacts": ["market_integrity", "client_interests"],
+  "suggested_alternatives": [],
+  "allowed": false,
+  "anomaly_score": 0.15
+}
+```
+
+### Example API Usage
+
+```python
+import requests
+
+# Evaluate an action
+response = requests.post("http://localhost:8000/evaluate", json={
+    "action_id": "test-001",
+    "domain": "financial_trading",
+    "action_type": "place_order",
+    "parameters": {"front_run": True},
+    "actor_id": "trader-99"
+})
+
+result = response.json()
+print(f"Decision: {result['decision']}")
+print(f"Reason: {result['reason']}")
+print(f"Law: {result['law']}")
+
+# Get logs
+logs_response = requests.get("http://localhost:8000/logs?limit=10")
+logs = logs_response.json()
+print(f"Total actions evaluated: {logs['total']}")
+```
+
+### Legacy Web Interface
+
+For a simpler HTTP server-based interface (no FastAPI required):
 
 ```bash
 python -m guardrails.web
 ```
 
-Then open `http://127.0.0.1:8000` to use the frontend form.
-
-Backend endpoints:
-
-- `POST /api/evaluate` – evaluate an action payload
-- `GET /api/domains` – list supported domain values
+Then open `http://127.0.0.1:8000` to use the basic frontend form.
 
 ## Running Tests
 
@@ -150,6 +249,8 @@ src/guardrails/
 ├── prevention.py                  # Prevention & enforcement engine
 ├── audit_logger.py                # Audit trail & compliance reporting
 ├── pipeline.py                    # Unified SafetyPipeline orchestrator
+├── api.py                         # FastAPI backend with REST endpoints
+├── web.py                         # Legacy HTTP server frontend
 └── detectors/
     ├── financial_trading.py       # SEC/FINRA rule engine
     ├── gaming.py                  # Fair-play rule engine
@@ -164,7 +265,11 @@ tests/
 ├── test_business_ethics.py
 ├── test_healthcare.py
 ├── test_platform_safety.py
+├── test_prevention.py
+├── test_web.py
 └── test_integration.py            # End-to-end pipeline + detection rate tests
+
+run_dashboard.py                   # Dashboard launcher script
 ```
 
 ## License
