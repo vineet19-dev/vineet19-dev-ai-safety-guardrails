@@ -1,5 +1,7 @@
 # AI Safety Guardrails
 
+> **Quick Start:** See [QUICKSTART.md](QUICKSTART.md) for a step-by-step guide to getting started.
+
 An enhanced AI safety guardrails system that detects and prevents unethical AI behaviors across multiple critical domains: **financial trading**, **gaming/esports**, **business operations**, **healthcare**, and **social platforms**.
 
 ## Overview
