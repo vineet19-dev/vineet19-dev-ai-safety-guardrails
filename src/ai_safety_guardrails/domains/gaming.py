@@ -6,7 +6,9 @@ import collections
 
 from ai_safety_guardrails.core.threat_level import ThreatLevel
 
-BOT_SPEED_THRESHOLD_MS = 500
+# Maximum average action gap (ms) below which regularity-based bot detection is applied.
+# Actions slower than this are not flagged purely for regularity (humans can be regular at slow speed).
+BOT_DETECTION_MAX_AVG_GAP_MS = 500
 
 
 @dataclass
@@ -55,9 +57,10 @@ class GamingBehaviorAnalyzer:
                     recommended_action='flag_and_investigate'
                 )
 
-            # CV check: only flag if timing is fast (< 500ms) AND suspiciously regular.
-            # Slow but regular timing (e.g. human at fixed intervals) should not be flagged.
-            if len(gaps) >= 3 and avg_gap > 0 and avg_gap < BOT_SPEED_THRESHOLD_MS:
+            # CV check: only flag if timing is fast (< BOT_DETECTION_MAX_AVG_GAP_MS) AND
+            # suspiciously regular (CV < 0.1). Bots produce machine-precise timing at high speed;
+            # a human can be slow but regular (e.g. taking a break), which should NOT be flagged.
+            if len(gaps) >= 3 and avg_gap > 0 and avg_gap < BOT_DETECTION_MAX_AVG_GAP_MS:
                 try:
                     cv = statistics.stdev(gaps) / avg_gap
                     if cv < 0.1:
