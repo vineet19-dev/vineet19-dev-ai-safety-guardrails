@@ -6,6 +6,8 @@ import collections
 
 from ai_safety_guardrails.core.threat_level import ThreatLevel
 
+BOT_SPEED_THRESHOLD_MS = 500
+
 
 @dataclass
 class ThreatAssessment:
@@ -55,7 +57,6 @@ class GamingBehaviorAnalyzer:
 
             # CV check: only flag if timing is fast (< 500ms) AND suspiciously regular.
             # Slow but regular timing (e.g. human at fixed intervals) should not be flagged.
-            BOT_SPEED_THRESHOLD_MS = 500
             if len(gaps) >= 3 and avg_gap > 0 and avg_gap < BOT_SPEED_THRESHOLD_MS:
                 try:
                     cv = statistics.stdev(gaps) / avg_gap
