@@ -13,7 +13,7 @@ from urllib.parse import urlparse
 from .ethical_framework import Action, Domain
 from .pipeline import SafetyPipeline
 
-_MAX_BODY_BYTES = 1024 * 1024
+MAX_REQUEST_BODY_SIZE_BYTES = 1024 * 1024
 _LOGGER = logging.getLogger(__name__)
 
 _INDEX_HTML = """<!doctype html>
@@ -52,7 +52,7 @@ _INDEX_HTML = """<!doctype html>
     </label>
     <label>Action Type <input id="action_type" value="place_order" required /></label>
     <label>Parameters (JSON object)
-      <textarea id="parameters">{ "front_running": true }</textarea>
+      <textarea id="parameters">{ "front_run": true }</textarea>
     </label>
     <button type="submit">Evaluate</button>
   </form>
@@ -116,6 +116,7 @@ def _parse_domain(raw_domain: str) -> Domain:
 
 
 def build_action_from_payload(payload: dict[str, Any]) -> Action:
+    """Build and validate an Action from a JSON payload dictionary."""
     action_id = str(payload.get("action_id") or "").strip()
     action_type = str(payload.get("action_type") or "").strip()
     actor_id = str(payload.get("actor_id") or "").strip()
@@ -152,12 +153,15 @@ def build_action_from_payload(payload: dict[str, Any]) -> Action:
 
 
 def evaluate_payload(payload: dict[str, Any], pipeline: SafetyPipeline) -> dict[str, Any]:
+    """Evaluate a JSON action payload and return a JSON-safe result object."""
     action = build_action_from_payload(payload)
     result = pipeline.evaluate(action)
     return _json_safe(asdict(result))
 
 
 def create_handler(pipeline: SafetyPipeline) -> type[BaseHTTPRequestHandler]:
+    """Create an HTTP request handler class bound to a SafetyPipeline instance."""
+
     class GuardrailsRequestHandler(BaseHTTPRequestHandler):
         def _send_json(self, status_code: int, body: dict[str, Any]) -> None:
             raw = json.dumps(body).encode("utf-8")
@@ -191,11 +195,15 @@ def create_handler(pipeline: SafetyPipeline) -> type[BaseHTTPRequestHandler]:
                 self._send_json(404, {"error": "Not found."})
                 return
 
-            content_length = int(self.headers.get("Content-Length", "0"))
+            try:
+                content_length = int(self.headers.get("Content-Length", "0"))
+            except ValueError:
+                self._send_json(400, {"error": "Invalid Content-Length header."})
+                return
             if content_length <= 0:
                 self._send_json(400, {"error": "Request body is required."})
                 return
-            if content_length > _MAX_BODY_BYTES:
+            if content_length > MAX_REQUEST_BODY_SIZE_BYTES:
                 self._send_json(413, {"error": "Request body too large."})
                 return
 
@@ -208,17 +216,24 @@ def create_handler(pipeline: SafetyPipeline) -> type[BaseHTTPRequestHandler]:
             except (json.JSONDecodeError, UnicodeDecodeError, ValueError) as exc:
                 self._send_json(400, {"error": str(exc)})
             except Exception as exc:  # pragma: no cover
-                _LOGGER.exception("Unhandled error while evaluating request: %s", exc)
+                _LOGGER.exception(
+                    "Unhandled %s while evaluating request path %s: %s",
+                    type(exc).__name__,
+                    path,
+                    exc,
+                )
                 self._send_json(500, {"error": "Internal server error."})
 
     return GuardrailsRequestHandler
 
 
 def run_server(host: str = "127.0.0.1", port: int = 8000) -> None:
+    """Start the web server for the frontend and JSON API, blocking until stopped."""
+
     pipeline = SafetyPipeline()
     handler = create_handler(pipeline)
     server = ThreadingHTTPServer((host, port), handler)
-    print(f"AI Safety Guardrails web app running at http://{host}:{port}")
+    _LOGGER.info("AI Safety Guardrails web app running at http://%s:%s", host, port)
     server.serve_forever()
 
 

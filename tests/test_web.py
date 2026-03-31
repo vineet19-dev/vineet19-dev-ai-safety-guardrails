@@ -52,3 +52,21 @@ def test_evaluate_payload_returns_json_safe_result():
     assert response["allowed"] is False
     assert response["verdict"]["verdict"] in {"block", "escalate"}
     assert response["prevention"]["blocked_reason"]
+
+
+def test_evaluate_payload_allows_clean_action():
+    pipeline = SafetyPipeline()
+    response = evaluate_payload(
+        {
+            "action_id": "web-004",
+            "actor_id": "user-4",
+            "domain": "gaming",
+            "action_type": "game_action",
+            "parameters": {"actions_per_minute": 120, "win_rate": 0.55},
+        },
+        pipeline,
+    )
+    assert response["allowed"] is True
+    assert response["verdict"]["verdict"] == "allow"
+    assert response["prevention"]["blocked_reason"] == ""
+    assert response["prevention"]["escalated"] is False
