@@ -102,6 +102,21 @@ print(pipeline.transparency_report())
 # ...
 ```
 
+## Web Frontend + Backend
+
+Run the built-in web application:
+
+```bash
+python -m guardrails.web
+```
+
+Then open `http://127.0.0.1:8000` to use the frontend form.
+
+Backend endpoints:
+
+- `POST /api/evaluate` – evaluate an action payload
+- `GET /api/domains` – list supported domain values
+
 ## Running Tests
 
 ```bash
