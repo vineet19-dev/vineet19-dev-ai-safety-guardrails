@@ -1,25 +1,157 @@
 # AI Safety Guardrails
 
+An enhanced AI safety guardrails system that detects and prevents unethical AI behaviors across multiple critical domains: **financial trading**, **gaming/esports**, **business operations**, **healthcare**, and **social platforms**.
+
 ## Overview
 
-AI Safety Guardrails is a project aimed at developing a framework for ensuring the responsible and ethical deployment of artificial intelligence systems. As AI technologies become increasingly prevalent in various industries, it is crucial to establish guidelines and practices that safeguard against potential risks and challenges.
+Real-world AI systems can engage in deeply unethical behaviors when optimizing for rewards without proper constraints. This system provides a multi-layered defense against such behaviors through:
 
-## Objectives
+- **Unified Ethical Framework** – regex-based rule engine with domain-specific classifiers, intent vs. outcome analysis, and stakeholder impact assessment
+- **Behavior Monitoring** – real-time anomaly scoring, frequency analysis, and network-based collusion detection
+- **Domain-Specific Detectors** – deep rule engines for each domain with regulatory references
+- **Prevention Engine** – action blocking, friction injection, and escalation triggers
+- **Audit Logger** – complete decision trail for regulatory compliance and transparency reporting
 
-- **Promote Ethical AI**: Establish standards that encourage fairness and accountability in AI applications.
-- **Risk Assessment**: Develop methodologies for identifying and mitigating risks associated with AI systems.
-- **Community Engagement**: Foster collaboration among stakeholders including developers, researchers, and policy-makers to share knowledge and best practices.
+## Supported Domains & Detected Violations
 
-## Features
+| Domain | Violations Detected |
+|---|---|
+| **Financial Trading** | Front-running, market manipulation, spoofing, layering, pump-and-dump, quote stuffing, wash trading, insider trading, price fixing |
+| **Gaming / Esports** | Account farming, collusion, glitch exploitation, smurf accounts, botting, match fixing |
+| **Business / Corporate** | Fraud, bribery, kickbacks, anti-competitive behavior, labor exploitation, environmental violations, money laundering |
+| **Healthcare** | Insurance fraud (upcoding/phantom billing), unnecessary treatments, patient coercion, PHI breaches, healthcare kickbacks, Stark Law violations |
+| **Social Platforms** | Misinformation, harassment, deepfakes, vote manipulation, CSAM, coordinated inauthentic behavior, incitement to violence |
 
-- Comprehensive guidelines for AI development and deployment.
-- Tools for risk assessment and ethical evaluation.
-- User-friendly documentation and resources for stakeholders.
+## Architecture
 
-## Getting Started
+```
+Action (input)
+    │
+    ▼
+BehaviorMonitor          ← real-time anomaly scoring & collusion detection
+    │
+    ▼
+Domain Detector          ← FinancialTradingMonitor | GamingBehaviorAnalyzer |
+    │                       BusinessEthicsValidator | HealthcareIntegrityMonitor |
+    │                       PlatformSafetyGuard
+    ▼
+EthicsClassifier         ← unified multi-dimensional classifier + intent analysis
+    │
+    ▼
+PreventionEngine         ← ALLOW / WARN (friction) / BLOCK / ESCALATE
+    │
+    ▼
+AuditLogger              ← full decision trail, compliance & transparency reports
+    │
+    ▼
+PipelineResult (output)
+```
 
-This repository will include resources, documentation, and tools necessary for implementing AI safety guardrails in various AI projects. We welcome contributions and insights from the community as we work towards this important goal.
+## Installation
+
+```bash
+pip install -e ".[dev]"
+```
+
+Python ≥ 3.10 is required (uses `match` statements). No third-party runtime dependencies.
+
+## Quick Start
+
+```python
+from guardrails import SafetyPipeline
+from guardrails.ethical_framework import Action, Domain
+
+pipeline = SafetyPipeline()
+
+# Evaluate a suspicious trading action
+action = Action(
+    action_id="order-001",
+    domain=Domain.FINANCIAL_TRADING,
+    action_type="place_order",
+    parameters={"front_run": True},
+    actor_id="trader-99",
+)
+
+result = pipeline.evaluate(action)
+print(result.allowed)              # False
+print(result.verdict.violations)   # ['front_running']
+print(result.prevention.blocked_reason)
+# "Action blocked due to policy violation(s): front_running."
+```
+
+### Checking for Collusion
+
+```python
+# Record interactions and detect coordinated actors
+for _ in range(6):
+    pipeline.collusion_check("actor-A", "actor-B")
+
+print(pipeline.collusion_check("actor-A", "actor-B"))  # True
+```
+
+### Compliance & Transparency Reporting
+
+```python
+report = pipeline.compliance_report()
+print(report["detection_rate"])   # e.g. 0.92
+
+print(pipeline.transparency_report())
+# === AI Safety Guardrails – Transparency Report ===
+# Total evaluations : 42
+# Actions blocked   : 38
+# ...
+```
+
+## Running Tests
+
+```bash
+python -m pytest tests/ -v
+```
+
+The test suite covers:
+
+- **111 unit and integration tests** across all domains
+- **Detection rate validation** – asserts ≥85% of known attack patterns are blocked
+- **False positive validation** – asserts <5% of clean actions are incorrectly blocked
+
+## Success Criteria
+
+| Criterion | Target | Status |
+|---|---|---|
+| Detection rate for known attacks | ≥ 85% | ✅ verified in tests |
+| Prevention of attempted violations | ≥ 90% | ✅ all attack scenarios blocked |
+| False positive rate | < 5% | ✅ verified in tests |
+| Full audit trail | Required | ✅ `AuditLogger` captures every decision |
+| Explainability | Required | ✅ `reasoning` field on every verdict |
+| Regulatory references | Required | ✅ each rule includes applicable law/regulation |
+
+## Project Structure
+
+```
+src/guardrails/
+├── __init__.py                    # Public API
+├── ethical_framework.py           # Multi-dimensional ethics classifier
+├── behavior_monitor.py            # Real-time behavior surveillance
+├── prevention.py                  # Prevention & enforcement engine
+├── audit_logger.py                # Audit trail & compliance reporting
+├── pipeline.py                    # Unified SafetyPipeline orchestrator
+└── detectors/
+    ├── financial_trading.py       # SEC/FINRA rule engine
+    ├── gaming.py                  # Fair-play rule engine
+    ├── business_ethics.py         # Corporate ethics rule engine
+    ├── healthcare.py              # HIPAA/AKS/Stark Law rule engine
+    └── platform_safety.py        # Platform community standards engine
+
+tests/
+├── test_ethical_framework.py
+├── test_financial_trading.py
+├── test_gaming.py
+├── test_business_ethics.py
+├── test_healthcare.py
+├── test_platform_safety.py
+└── test_integration.py            # End-to-end pipeline + detection rate tests
+```
 
 ## License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+This project is licensed under the MIT License – see the [LICENSE](LICENSE) file for details.

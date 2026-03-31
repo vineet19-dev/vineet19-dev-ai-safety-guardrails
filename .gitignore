@@ -1,12 +1,25 @@
+# Python bytecode
 __pycache__/
-*.pyc
-*.pyo
+*.py[cod]
+*$py.class
+
+# Distribution / packaging
 *.egg-info/
-*.egg
 dist/
 build/
-.eggs/
-*.so
-.env
-.venv
+*.egg
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Pytest / coverage
 .pytest_cache/
+.coverage
+htmlcov/
+
+# Editor
+.vscode/
+.idea/
+*.swp

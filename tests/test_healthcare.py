@@ -1,87 +1,100 @@
+"""Tests for the healthcare integrity monitor."""
+
 import pytest
-from ai_safety_guardrails.domains.healthcare import HealthcareIntegrityMonitor, ClaimAssessment, PatternAssessment, ThreatLevel
+
+from guardrails.detectors.healthcare import HealthcareIntegrityMonitor
+from guardrails.ethical_framework import Action, Domain
 
 
-def test_legitimate_claim():
-    monitor = HealthcareIntegrityMonitor()
-    claim = {
-        'claim_id': 'C001',
-        'patient_id': 'P001',
-        'billed_procedure_code': 'CPT99213',
-        'actual_procedure_code': 'CPT99213',
-        'amount': 150
-    }
-    result = monitor.analyze_claim(claim)
-    assert isinstance(result, ClaimAssessment)
-    assert result.is_suspicious == False
-    assert result.threat_level == ThreatLevel.LOW
+@pytest.fixture
+def monitor() -> HealthcareIntegrityMonitor:
+    return HealthcareIntegrityMonitor()
 
 
-def test_upcoding_detection():
-    monitor = HealthcareIntegrityMonitor()
-    claim = {
-        'claim_id': 'C002',
-        'patient_id': 'P002',
-        'billed_procedure_code': 'CPT99215',  # Level 5 (expensive)
-        'actual_procedure_code': 'CPT99212',  # Level 2 (cheap)
-        'amount': 300
-    }
-    result = monitor.analyze_claim(claim)
-    assert result.is_suspicious == True
-    assert result.threat_level in (ThreatLevel.HIGH, ThreatLevel.MEDIUM)
-    assert any('upcode' in i.lower() or 'upcod' in i.lower() for i in result.fraud_indicators)
+def _health_action(action_id: str = "h-001", **params) -> Action:
+    return Action(
+        action_id=action_id,
+        domain=Domain.HEALTHCARE,
+        action_type="healthcare_action",
+        parameters=params,
+    )
 
 
-def test_ghost_service_detection():
-    monitor = HealthcareIntegrityMonitor()
-    claim = {
-        'claim_id': 'C003',
-        'patient_id': 'P003',
-        'service_not_rendered': True,
-        'amount': 500
-    }
-    result = monitor.analyze_claim(claim)
-    assert result.is_suspicious == True
-    assert any('ghost' in i.lower() for i in result.fraud_indicators)
+class TestInsuranceFraud:
+    def test_upcoding_detected(self, monitor):
+        action = _health_action(billing_upcoding=True)
+        result = monitor.analyze(action)
+        assert not result.compliant
+        assert any(v.rule == "insurance_fraud_upcoding" for v in result.violations)
+
+    def test_phantom_billing_detected(self, monitor):
+        action = _health_action(phantom_billing=True)
+        result = monitor.analyze(action)
+        assert any(v.rule == "insurance_fraud_phantom" for v in result.violations)
+
+    def test_duplicate_billing_detected(self, monitor):
+        action = _health_action(duplicate_billing=True)
+        result = monitor.analyze(action)
+        assert any(v.rule == "duplicate_billing" for v in result.violations)
 
 
-def test_duplicate_billing_detection():
-    monitor = HealthcareIntegrityMonitor()
-    claim = {
-        'claim_id': 'C004',
-        'patient_id': 'P004',
-        'is_duplicate': True,
-        'amount': 200
-    }
-    result = monitor.analyze_claim(claim)
-    assert result.is_suspicious == True
+class TestUnnecessaryTreatment:
+    def test_medically_unnecessary_detected(self, monitor):
+        action = _health_action(medically_unnecessary=True)
+        result = monitor.analyze(action)
+        assert any(v.rule == "unnecessary_treatment" for v in result.violations)
+
+    def test_off_label_no_consent_detected(self, monitor):
+        action = _health_action(off_label_without_consent=True)
+        result = monitor.analyze(action)
+        assert any(v.rule == "off_label_no_consent" for v in result.violations)
 
 
-def test_normal_treatment_pattern():
-    monitor = HealthcareIntegrityMonitor()
-    treatments = [
-        {'procedure': 'checkup', 'date': '2024-01-01'},
-        {'procedure': 'blood_test', 'date': '2024-01-15'},
-        {'procedure': 'followup', 'date': '2024-02-01'},
-    ]
-    result = monitor.analyze_treatment_pattern('patient_normal', treatments)
-    assert isinstance(result, PatternAssessment)
-    assert result.is_suspicious == False
+class TestPatientExploitation:
+    def test_coercion_detected(self, monitor):
+        action = _health_action(patient_coerced=True)
+        result = monitor.analyze(action)
+        assert any(v.rule == "patient_coercion" for v in result.violations)
+        assert result.risk_score >= 1.0  # critical severity
 
 
-def test_unnecessary_treatment_detection():
-    monitor = HealthcareIntegrityMonitor()
-    # Same procedure repeated > 10 times
-    treatments = [{'procedure': 'mri_scan', 'date': f'2024-{i:02d}-01'} for i in range(1, 13)]
-    result = monitor.analyze_treatment_pattern('patient_exploit', treatments)
-    assert result.is_suspicious == True
-    assert result.threat_level in (ThreatLevel.HIGH, ThreatLevel.MEDIUM)
+class TestDataBreach:
+    def test_phi_unauthorized_access(self, monitor):
+        action = _health_action(phi_accessed_without_auth=True)
+        result = monitor.analyze(action)
+        assert any(v.rule == "unauthorized_phi_access" for v in result.violations)
+
+    def test_unsecured_phi_transmission(self, monitor):
+        action = _health_action(phi_transmitted_unsecured=True)
+        result = monitor.analyze(action)
+        assert any(v.rule == "unsecured_phi_transmission" for v in result.violations)
 
 
-def test_data_breach_detection():
-    monitor = HealthcareIntegrityMonitor()
-    # Many data accesses
-    treatments = [{'procedure': 'checkup', 'type': 'data_access'} for _ in range(25)]
-    result = monitor.analyze_treatment_pattern('suspicious_access', treatments)
-    assert result.is_suspicious == True
-    assert 'data' in result.pattern_type.lower() or 'breach' in result.pattern_type.lower()
+class TestKickback:
+    def test_kickback_received(self, monitor):
+        action = _health_action(kickback_received=True)
+        result = monitor.analyze(action)
+        assert any(v.rule == "healthcare_kickback" for v in result.violations)
+
+    def test_stark_law_violation(self, monitor):
+        action = _health_action(self_referral_violation=True)
+        result = monitor.analyze(action)
+        assert any(v.rule == "stark_law_violation" for v in result.violations)
+
+
+class TestCleanHealthcare:
+    def test_legitimate_action_compliant(self, monitor):
+        action = _health_action()
+        result = monitor.analyze(action)
+        assert result.compliant
+        assert result.risk_score == 0.0
+
+    def test_wrong_domain_na(self, monitor):
+        action = Action(
+            action_id="x",
+            domain=Domain.BUSINESS,
+            action_type="submit_report",
+            parameters={},
+        )
+        result = monitor.analyze(action)
+        assert result.summary == "N/A – wrong domain"

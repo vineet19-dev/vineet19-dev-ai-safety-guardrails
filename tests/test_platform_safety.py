@@ -1,83 +1,120 @@
+"""Tests for the platform safety guard."""
+
 import pytest
-from datetime import datetime, timedelta
-from ai_safety_guardrails.domains.platform_safety import PlatformSafetyGuard, ContentAssessment, CoordinationAssessment, ThreatLevel
+
+from guardrails.detectors.platform_safety import PlatformSafetyGuard
+from guardrails.ethical_framework import Action, Domain
 
 
-def test_safe_content():
-    guard = PlatformSafetyGuard()
-    content = {
-        'content_id': 'c1',
-        'text': 'Hello world',
-        'contains_false_claims': False,
-        'fact_check_failed': False
-    }
-    result = guard.analyze_content(content)
-    assert isinstance(result, ContentAssessment)
-    assert result.is_safe == True
-    assert result.threat_level == ThreatLevel.LOW
+@pytest.fixture
+def guard() -> PlatformSafetyGuard:
+    return PlatformSafetyGuard()
 
 
-def test_misinformation_detection():
-    guard = PlatformSafetyGuard()
-    content = {
-        'content_id': 'c2',
-        'text': 'False health claim',
-        'contains_false_claims': True,
-        'fact_check_failed': True
-    }
-    result = guard.analyze_content(content)
-    assert result.is_safe == False
-    assert 'misinformation' in result.threat_types
+def _platform_action(action_id: str = "p-001", **params) -> Action:
+    return Action(
+        action_id=action_id,
+        domain=Domain.SOCIAL_PLATFORM,
+        action_type="submit_content",
+        parameters=params,
+    )
 
 
-def test_harassment_detection():
-    guard = PlatformSafetyGuard()
-    content = {
-        'content_id': 'c3',
-        'targeted_at': 'user123',
-        'contains_threats': True,
-        'contains_slurs': False
-    }
-    result = guard.analyze_content(content)
-    assert result.is_safe == False
-    assert 'harassment' in result.threat_types
+class TestMisinformation:
+    def test_explicit_flag_detected(self, guard):
+        action = _platform_action(contains_misinformation=True)
+        result = guard.analyze(action)
+        assert not result.compliant
+        assert any(v.rule == "misinformation" for v in result.violations)
+
+    def test_high_confidence_score_detected(self, guard):
+        action = _platform_action(misinformation_confidence=0.85)
+        result = guard.analyze(action)
+        assert any(v.rule == "misinformation" for v in result.violations)
+
+    def test_low_confidence_clean(self, guard):
+        action = _platform_action(misinformation_confidence=0.20)
+        result = guard.analyze(action)
+        assert not any(v.rule == "misinformation" for v in result.violations)
 
 
-def test_deepfake_detection():
-    guard = PlatformSafetyGuard()
-    content = {
-        'content_id': 'c4',
-        'media_type': 'video',
-        'metadata_inconsistent': True,
-        'ai_generated_detected': True
-    }
-    result = guard.analyze_content(content)
-    assert result.is_safe == False
-    assert 'deepfake' in result.threat_types
+class TestHarassment:
+    def test_targets_individual_detected(self, guard):
+        action = _platform_action(targets_individual=True)
+        result = guard.analyze(action)
+        assert any(v.rule == "harassment" for v in result.violations)
+
+    def test_doxxing_detected(self, guard):
+        action = _platform_action(doxxes_individual=True)
+        result = guard.analyze(action)
+        assert any(v.rule == "doxxing" for v in result.violations)
 
 
-def test_coordinated_behavior_detection():
-    guard = PlatformSafetyGuard()
-    now = datetime.now()
-    accounts = [{'account_id': f'acc{i}'} for i in range(10)]
-    # Many accounts targeting same content
-    actions = [{'account_id': f'acc{i}', 'action_type': 'share', 'target_id': 'viral_post_123'} for i in range(8)]
-    actions += [{'account_id': 'acc8', 'action_type': 'like', 'target_id': 'other_post'}]
-    actions += [{'account_id': 'acc9', 'action_type': 'comment', 'target_id': 'other_post_2'}]
+class TestDeepfake:
+    def test_explicit_deepfake_detected(self, guard):
+        action = _platform_action(is_deepfake=True)
+        result = guard.analyze(action)
+        assert any(v.rule == "deepfake" for v in result.violations)
 
-    result = guard.detect_coordinated_behavior(accounts, actions)
-    assert isinstance(result, CoordinationAssessment)
-    assert result.is_coordinated == True
-    assert result.threat_level in (ThreatLevel.HIGH, ThreatLevel.MEDIUM, ThreatLevel.CRITICAL)
+    def test_high_confidence_deepfake_detected(self, guard):
+        action = _platform_action(deepfake_confidence=0.90)
+        result = guard.analyze(action)
+        assert any(v.rule == "deepfake" for v in result.violations)
+
+    def test_low_confidence_clean(self, guard):
+        action = _platform_action(deepfake_confidence=0.30)
+        result = guard.analyze(action)
+        assert not any(v.rule == "deepfake" for v in result.violations)
 
 
-def test_no_coordination():
-    guard = PlatformSafetyGuard()
-    accounts = [{'account_id': f'acc{i}'} for i in range(5)]
-    actions = [
-        {'account_id': 'acc0', 'action_type': 'share', 'target_id': 'post_1'},
-        {'account_id': 'acc1', 'action_type': 'like', 'target_id': 'post_2'},
-        {'account_id': 'acc2', 'action_type': 'comment', 'target_id': 'post_3'},
-    ]
-    result = guard.detect_coordinated_behavior(accounts, actions)
-    assert isinstance(result, CoordinationAssessment)
+class TestVoteManipulation:
+    def test_vote_manipulation_critical(self, guard):
+        action = _platform_action(vote_manipulation=True)
+        result = guard.analyze(action)
+        assert any(v.rule == "vote_manipulation" for v in result.violations)
+        assert result.risk_score >= 1.0
+
+
+class TestChildExploitation:
+    def test_csam_detected(self, guard):
+        action = _platform_action(involves_minors_sexually=True)
+        result = guard.analyze(action)
+        assert any(v.rule == "child_sexual_exploitation" for v in result.violations)
+        assert result.risk_score >= 1.0
+
+
+class TestCoordinatedInauthentic:
+    def test_multiple_actors_detected(self, guard):
+        action = _platform_action(coordinated_actors=5)
+        result = guard.analyze(action)
+        assert any(v.rule == "coordinated_inauthentic_behavior" for v in result.violations)
+
+    def test_two_actors_clean(self, guard):
+        action = _platform_action(coordinated_actors=2)
+        result = guard.analyze(action)
+        assert not any(v.rule == "coordinated_inauthentic_behavior" for v in result.violations)
+
+
+class TestViolence:
+    def test_incitement_detected(self, guard):
+        action = _platform_action(incites_violence=True)
+        result = guard.analyze(action)
+        assert any(v.rule == "incitement_to_violence" for v in result.violations)
+
+
+class TestCleanContent:
+    def test_legitimate_post_compliant(self, guard):
+        action = _platform_action()
+        result = guard.analyze(action)
+        assert result.compliant
+        assert result.risk_score == 0.0
+
+    def test_wrong_domain_na(self, guard):
+        action = Action(
+            action_id="x",
+            domain=Domain.HEALTHCARE,
+            action_type="submit",
+            parameters={},
+        )
+        result = guard.analyze(action)
+        assert result.summary == "N/A – wrong domain"

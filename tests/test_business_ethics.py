@@ -1,86 +1,109 @@
+"""Tests for the business ethics validator."""
+
 import pytest
-from ai_safety_guardrails.domains.business_ethics import BusinessEthicsValidator, ValidationResult, AuditResult
+
+from guardrails.detectors.business_ethics import BusinessEthicsValidator
+from guardrails.ethical_framework import Action, Domain
 
 
-def test_legitimate_business_action():
-    validator = BusinessEthicsValidator()
-    action = {
-        'action_type': 'contract_signing',
-        'transparent': True,
-        'contains_misrepresentation': False
-    }
-    result = validator.validate_business_action(action)
-    assert isinstance(result, ValidationResult)
-    assert result.is_valid == True
-    assert len(result.violations) == 0
+@pytest.fixture
+def validator() -> BusinessEthicsValidator:
+    return BusinessEthicsValidator()
 
 
-def test_fraud_detection():
-    validator = BusinessEthicsValidator()
-    action = {
-        'action_type': 'contract',
-        'contains_misrepresentation': True,
-        'false_statements': True
-    }
-    result = validator.validate_business_action(action)
-    assert result.is_valid == False
-    assert len(result.violations) > 0
-    assert any('fraud' in v.lower() for v in result.violations)
+def _biz_action(action_id: str = "b-001", **params) -> Action:
+    return Action(
+        action_id=action_id,
+        domain=Domain.BUSINESS,
+        action_type="business_action",
+        parameters=params,
+    )
 
 
-def test_bribery_detection():
-    validator = BusinessEthicsValidator()
-    action = {
-        'action_type': 'payment',
-        'payment_amount': 5000,
-        'payment_purpose': 'gift'
-    }
-    result = validator.validate_business_action(action)
-    assert result.is_valid == False
-    assert any('bribery' in v.lower() for v in result.violations)
+class TestFraud:
+    def test_fraud_detected(self, validator):
+        action = _biz_action(involves_fraud=True)
+        result = validator.analyze(action)
+        assert not result.compliant
+        assert any(v.rule == "fraud" for v in result.violations)
 
 
-def test_anti_competitive_detection():
-    validator = BusinessEthicsValidator()
-    action = {
-        'action_type': 'pricing_meeting',
-        'price_coordination': True
-    }
-    result = validator.validate_business_action(action)
-    assert result.is_valid == False
-    assert any('anti_competitive' in v.lower() or 'competitive' in v.lower() for v in result.violations)
+class TestBribery:
+    def test_bribery_detected(self, validator):
+        action = _biz_action(involves_bribery=True, bribe_value=5000)
+        result = validator.analyze(action)
+        assert any(v.rule == "bribery" for v in result.violations)
+
+    def test_kickback_detected(self, validator):
+        action = _biz_action(involves_kickback=True)
+        result = validator.analyze(action)
+        assert any(v.rule == "kickback" for v in result.violations)
 
 
-def test_labor_exploitation_detection():
-    validator = BusinessEthicsValidator()
-    action = {
-        'action_type': 'payroll',
-        'wage_below_minimum': True
-    }
-    result = validator.validate_business_action(action)
-    assert result.is_valid == False
-    assert any('labor' in v.lower() or 'exploitation' in v.lower() for v in result.violations)
+class TestAntiCompetitive:
+    def test_anti_competitive_detected(self, validator):
+        action = _biz_action(anti_competitive=True)
+        result = validator.analyze(action)
+        assert any(v.rule == "anti_competitive_behavior" for v in result.violations)
 
 
-def test_financial_audit_clean_records():
-    validator = BusinessEthicsValidator()
-    records = [
-        {'record_id': 'r1', 'amount': 1000},
-        {'record_id': 'r2', 'amount': 1200},
-        {'record_id': 'r3', 'amount': 900},
-        {'record_id': 'r4', 'amount': 1100},
-    ]
-    result = validator.audit_financial_records(records)
-    assert isinstance(result, AuditResult)
+class TestLaborExploitation:
+    def test_wage_below_minimum_detected(self, validator):
+        action = _biz_action(wage_below_minimum=True)
+        result = validator.analyze(action)
+        assert any(v.rule == "wage_theft" for v in result.violations)
+
+    def test_unpaid_overtime_detected(self, validator):
+        action = _biz_action(forced_unpaid_overtime=True)
+        result = validator.analyze(action)
+        assert any(v.rule == "labor_exploitation" for v in result.violations)
+
+    def test_child_labor_critical(self, validator):
+        action = _biz_action(child_labor=True)
+        result = validator.analyze(action)
+        assert any(v.rule == "child_labor" for v in result.violations)
+        assert result.risk_score >= 1.0  # critical severity
 
 
-def test_financial_audit_with_anomalies():
-    validator = BusinessEthicsValidator()
-    # Normal records with one massive outlier
-    records = [
-        {'amount': 1000}, {'amount': 1100}, {'amount': 900}, {'amount': 1050},
-        {'amount': 1000}, {'amount': 950}, {'amount': 1000}, {'amount': 100000}  # Outlier
-    ]
-    result = validator.audit_financial_records(records)
-    assert result.has_anomalies == True
-    assert len(result.anomalies) > 0
+class TestEnvironmental:
+    def test_illegal_discharge_detected(self, validator):
+        action = _biz_action(illegal_discharge=True)
+        result = validator.analyze(action)
+        assert any(v.rule == "illegal_discharge" for v in result.violations)
+
+    def test_emissions_violation_detected(self, validator):
+        action = _biz_action(emissions_exceed_limit=True)
+        result = validator.analyze(action)
+        assert any(v.rule == "emissions_violation" for v in result.violations)
+
+
+class TestMoneyLaundering:
+    def test_money_laundering_detected(self, validator):
+        action = _biz_action(involves_money_laundering=True)
+        result = validator.analyze(action)
+        assert any(v.rule == "money_laundering" for v in result.violations)
+
+
+class TestDataMisuse:
+    def test_data_misuse_detected(self, validator):
+        action = _biz_action(data_misuse=True)
+        result = validator.analyze(action)
+        assert any(v.rule == "data_misuse" for v in result.violations)
+
+
+class TestCleanBusiness:
+    def test_legitimate_action_compliant(self, validator):
+        action = _biz_action()
+        result = validator.analyze(action)
+        assert result.compliant
+        assert result.risk_score == 0.0
+
+    def test_wrong_domain_na(self, validator):
+        action = Action(
+            action_id="x",
+            domain=Domain.GAMING,
+            action_type="play",
+            parameters={},
+        )
+        result = validator.analyze(action)
+        assert result.summary == "N/A – wrong domain"

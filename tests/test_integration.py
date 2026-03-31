@@ -1,197 +1,401 @@
+"""
+Integration tests for the SafetyPipeline.
+
+These tests exercise the full pipeline end-to-end, verifying that:
+  - Domain-specific detectors fire and are merged into the verdict.
+  - Prevention engine blocks / warns appropriately.
+  - Audit logger captures all decisions.
+  - Compliance report metrics are sensible.
+  - Behavior monitor collusion detection works.
+"""
+
+from __future__ import annotations
+
 import pytest
-from datetime import datetime, timedelta
-from ai_safety_guardrails.core.ethical_framework import EthicsClassifier, Domain
-from ai_safety_guardrails.core.behavior_monitor import BehaviorMonitor
-from ai_safety_guardrails.core.audit_logger import AuditLogger
-from ai_safety_guardrails.domains.financial_trading import FinancialTradingMonitor, ThreatLevel
-from ai_safety_guardrails.domains.gaming import GamingBehaviorAnalyzer
-from ai_safety_guardrails.detection.anomaly_detector import AnomalyDetector
-from ai_safety_guardrails.detection.network_analyzer import NetworkAnalyzer
-from ai_safety_guardrails.prevention.action_blocker import ActionBlocker
-from ai_safety_guardrails.prevention.constraint_enforcer import ConstraintEnforcer, Constraint
+
+from guardrails import SafetyPipeline
+from guardrails.ethical_framework import Action, Domain, VerdictType
 
 
-class TestFullPipeline:
-    """Integration tests for the full AI safety guardrails pipeline."""
+@pytest.fixture
+def pipeline() -> SafetyPipeline:
+    return SafetyPipeline()
 
-    def test_financial_trading_full_pipeline(self):
-        """Test complete financial trading detection and prevention pipeline."""
-        monitor = FinancialTradingMonitor()
-        blocker = ActionBlocker()
-        logger = AuditLogger()
 
-        now = datetime.now()
+# ---------------------------------------------------------------------------
+# Financial trading integration
+# ---------------------------------------------------------------------------
 
-        # Step 1: First trade (buy)
-        buy_trade = {
-            'agent_id': 'trader_1',
-            'asset': 'AAPL',
-            'side': 'buy',
-            'amount': 100,
-            'timestamp': now
-        }
-        threat1 = monitor.analyze_trade(buy_trade)
-        decision1 = blocker.evaluate_and_block(buy_trade, threat1)
-        logger.log_decision({'trade': buy_trade, 'threat': threat1.threat_type, 'blocked': decision1.should_block})
+class TestFinancialTradingIntegration:
+    def test_front_run_is_blocked(self, pipeline):
+        action = Action(
+            action_id="int-ft-001",
+            domain=Domain.FINANCIAL_TRADING,
+            action_type="place_order",
+            parameters={"front_run": True},
+            actor_id="bad-trader",
+        )
+        result = pipeline.evaluate(action)
+        assert not result.allowed
+        assert result.prevention.blocked_reason != ""
 
-        assert decision1.should_block == False  # Legitimate first trade
+    def test_spoofing_is_blocked(self, pipeline):
+        action = Action(
+            action_id="int-ft-002",
+            domain=Domain.FINANCIAL_TRADING,
+            action_type="place_order",
+            parameters={"cancel_ratio": 0.95},
+            actor_id="spoofer",
+        )
+        result = pipeline.evaluate(action)
+        assert not result.allowed
 
-        # Step 2: Wash trade (sell same asset within 60 seconds)
-        sell_trade = {
-            'agent_id': 'trader_1',
-            'asset': 'AAPL',
-            'side': 'sell',
-            'amount': 100,
-            'timestamp': now + timedelta(seconds=30)
-        }
-        threat2 = monitor.analyze_trade(sell_trade)
-        decision2 = blocker.evaluate_and_block(sell_trade, threat2)
-        logger.log_decision({'trade': sell_trade, 'threat': threat2.threat_type, 'blocked': decision2.should_block})
+    def test_legitimate_trade_allowed(self, pipeline):
+        action = Action(
+            action_id="int-ft-003",
+            domain=Domain.FINANCIAL_TRADING,
+            action_type="place_limit_order",
+            parameters={"side": "buy", "price": 100.0, "quantity": 50},
+            actor_id="good-trader",
+        )
+        result = pipeline.evaluate(action)
+        assert result.allowed
 
-        assert threat2.threat_level in (ThreatLevel.HIGH, ThreatLevel.MEDIUM)
-        assert decision2.should_block == True
+    def test_pump_and_dump_escalated(self, pipeline):
+        action = Action(
+            action_id="int-ft-004",
+            domain=Domain.FINANCIAL_TRADING,
+            action_type="place_order",
+            parameters={"pump_and_dump": True},
+            actor_id="bad-actor",
+        )
+        result = pipeline.evaluate(action)
+        assert not result.allowed
+        assert result.prevention.escalated
 
-        # Step 3: Verify audit trail
-        trail = logger.get_audit_trail()
-        assert len(trail) == 2
+    def test_insider_trading_escalated(self, pipeline):
+        action = Action(
+            action_id="int-ft-005",
+            domain=Domain.FINANCIAL_TRADING,
+            action_type="place_order",
+            parameters={"uses_non_public_info": True},
+            actor_id="insider",
+        )
+        result = pipeline.evaluate(action)
+        assert not result.allowed
 
-    def test_behavior_monitoring_integration(self):
-        """Test behavior monitoring detects escalating patterns."""
-        monitor = BehaviorMonitor()
-        logger = AuditLogger()
 
-        agent_id = 'agent_escalating'
+# ---------------------------------------------------------------------------
+# Gaming integration
+# ---------------------------------------------------------------------------
 
-        # Record increasing severity actions
+class TestGamingIntegration:
+    def test_match_fixing_blocked(self, pipeline):
+        action = Action(
+            action_id="int-g-001",
+            domain=Domain.GAMING,
+            action_type="submit_match_result",
+            parameters={"match_outcome_predetermined": True},
+            actor_id="fixer",
+        )
+        result = pipeline.evaluate(action)
+        assert not result.allowed
+
+    def test_botting_blocked(self, pipeline):
+        action = Action(
+            action_id="int-g-002",
+            domain=Domain.GAMING,
+            action_type="game_action",
+            parameters={"actions_per_minute": 600},
+            actor_id="botter",
+        )
+        result = pipeline.evaluate(action)
+        assert not result.allowed
+
+    def test_fair_play_allowed(self, pipeline):
+        action = Action(
+            action_id="int-g-003",
+            domain=Domain.GAMING,
+            action_type="game_action",
+            parameters={"actions_per_minute": 150, "win_rate": 0.55, "account_age_days": 200},
+            actor_id="fair-player",
+        )
+        result = pipeline.evaluate(action)
+        assert result.allowed
+
+
+# ---------------------------------------------------------------------------
+# Business integration
+# ---------------------------------------------------------------------------
+
+class TestBusinessIntegration:
+    def test_fraud_blocked(self, pipeline):
+        action = Action(
+            action_id="int-b-001",
+            domain=Domain.BUSINESS,
+            action_type="financial_transaction",
+            parameters={"involves_fraud": True},
+            actor_id="bad-corp",
+        )
+        result = pipeline.evaluate(action)
+        assert not result.allowed
+
+    def test_bribery_blocked(self, pipeline):
+        action = Action(
+            action_id="int-b-002",
+            domain=Domain.BUSINESS,
+            action_type="payment",
+            parameters={"involves_bribery": True, "bribe_value": 10000},
+            actor_id="corrupt-exec",
+        )
+        result = pipeline.evaluate(action)
+        assert not result.allowed
+
+    def test_compliant_business_action_allowed(self, pipeline):
+        action = Action(
+            action_id="int-b-003",
+            domain=Domain.BUSINESS,
+            action_type="submit_invoice",
+            parameters={"amount": 500, "vendor": "acme-inc"},
+            actor_id="finance-dept",
+        )
+        result = pipeline.evaluate(action)
+        assert result.allowed
+
+
+# ---------------------------------------------------------------------------
+# Healthcare integration
+# ---------------------------------------------------------------------------
+
+class TestHealthcareIntegration:
+    def test_phantom_billing_blocked(self, pipeline):
+        action = Action(
+            action_id="int-h-001",
+            domain=Domain.HEALTHCARE,
+            action_type="submit_claim",
+            parameters={"phantom_billing": True},
+            actor_id="bad-clinic",
+        )
+        result = pipeline.evaluate(action)
+        assert not result.allowed
+
+    def test_patient_coercion_escalated(self, pipeline):
+        action = Action(
+            action_id="int-h-002",
+            domain=Domain.HEALTHCARE,
+            action_type="prescribe_treatment",
+            parameters={"patient_coerced": True},
+            actor_id="bad-doctor",
+        )
+        result = pipeline.evaluate(action)
+        assert not result.allowed
+
+    def test_legitimate_prescription_allowed(self, pipeline):
+        action = Action(
+            action_id="int-h-003",
+            domain=Domain.HEALTHCARE,
+            action_type="prescribe_medication",
+            parameters={"medication": "amoxicillin", "dose_mg": 500},
+            actor_id="good-doctor",
+        )
+        result = pipeline.evaluate(action)
+        assert result.allowed
+
+
+# ---------------------------------------------------------------------------
+# Platform safety integration
+# ---------------------------------------------------------------------------
+
+class TestPlatformIntegration:
+    def test_deepfake_blocked(self, pipeline):
+        action = Action(
+            action_id="int-p-001",
+            domain=Domain.SOCIAL_PLATFORM,
+            action_type="upload_video",
+            parameters={"is_deepfake": True},
+            actor_id="bad-user",
+        )
+        result = pipeline.evaluate(action)
+        assert not result.allowed
+
+    def test_csam_blocked_and_escalated(self, pipeline):
+        action = Action(
+            action_id="int-p-002",
+            domain=Domain.SOCIAL_PLATFORM,
+            action_type="upload_content",
+            parameters={"involves_minors_sexually": True},
+            actor_id="criminal",
+        )
+        result = pipeline.evaluate(action)
+        assert not result.allowed
+        assert result.prevention.escalated
+
+    def test_normal_post_allowed(self, pipeline):
+        action = Action(
+            action_id="int-p-003",
+            domain=Domain.SOCIAL_PLATFORM,
+            action_type="submit_post",
+            parameters={"text": "Hello world"},
+            actor_id="regular-user",
+        )
+        result = pipeline.evaluate(action)
+        assert result.allowed
+
+
+# ---------------------------------------------------------------------------
+# Audit and compliance
+# ---------------------------------------------------------------------------
+
+class TestAuditAndCompliance:
+    def test_all_evaluations_logged(self, pipeline):
         for i in range(5):
-            action = {
-                'action_type': 'trade',
-                'amount': 1000 * (i + 1),
-                'risk_level': 'high' if i > 2 else 'low'
-            }
-            monitor.record_action(agent_id, action)
+            action = Action(
+                action_id=f"audit-{i}",
+                domain=Domain.FINANCIAL_TRADING,
+                action_type="place_order",
+                parameters={},
+                actor_id="trader",
+            )
+            pipeline.evaluate(action)
+        entries = pipeline.audit_entries()
+        assert len(entries) == 5
 
-        history = monitor.get_behavior_history(agent_id)
-        assert len(history) == 5
+    def test_compliance_report_keys(self, pipeline):
+        action = Action(
+            action_id="cr-001",
+            domain=Domain.BUSINESS,
+            action_type="fraud_attempt",
+            parameters={"involves_fraud": True},
+            actor_id="bad-actor",
+        )
+        pipeline.evaluate(action)
+        report = pipeline.compliance_report()
+        assert "total_evaluations" in report
+        assert "blocked" in report
+        assert "detection_rate" in report
+        assert report["total_evaluations"] >= 1
 
-        patterns = monitor.detect_anomalous_patterns(agent_id)
-        assert isinstance(patterns, list)
+    def test_transparency_report_is_string(self, pipeline):
+        action = Action(
+            action_id="tr-001",
+            domain=Domain.GAMING,
+            action_type="play",
+            parameters={},
+            actor_id="player",
+        )
+        pipeline.evaluate(action)
+        report = pipeline.transparency_report()
+        assert isinstance(report, str)
+        assert "Transparency Report" in report
 
-        # Log to audit
-        logger.log_decision({
-            'agent_id': agent_id,
-            'anomalous_patterns': len(patterns),
-            'action': 'monitored'
-        })
 
-        report = logger.export_compliance_report()
-        assert isinstance(report, dict)
+# ---------------------------------------------------------------------------
+# Behavior monitoring and collusion
+# ---------------------------------------------------------------------------
 
-    def test_anomaly_detection_integration(self):
-        """Test anomaly detection integrated with network analysis."""
-        detector = AnomalyDetector()
-        analyzer = NetworkAnalyzer()
+class TestBehaviorMonitoring:
+    def test_actor_summary_after_actions(self, pipeline):
+        for i in range(3):
+            action = Action(
+                action_id=f"bm-{i}",
+                domain=Domain.GAMING,
+                action_type="game_action",
+                parameters={},
+                actor_id="monitored-player",
+            )
+            pipeline.evaluate(action)
+        summary = pipeline.actor_summary("monitored-player")
+        assert summary["action_count"] == 3
 
-        # Detect volume anomalies
-        volumes = [100, 105, 98, 102, 99, 101, 98, 1000]  # Last is anomalous
-        anomalies = detector.detect(volumes)
-        assert any(a.is_anomaly for a in anomalies)
+    def test_collusion_check_increments(self, pipeline):
+        # Record interactions between two actors
+        for _ in range(6):
+            pipeline.collusion_check("actor-A", "actor-B")
+        assert pipeline.collusion_check("actor-A", "actor-B")
 
-        # Find network of related entities
-        entities = ['A', 'B', 'C', 'D']
-        relationships = [('A', 'B'), ('B', 'C'), ('C', 'A')]  # Triangle = suspicious
-        network = analyzer.build_network(entities, relationships)
-        clusters = analyzer.detect_collusion_clusters(network)
 
-        assert len(clusters) > 0
+# ---------------------------------------------------------------------------
+# Detection rate requirement: ≥85% of known attack patterns blocked
+# ---------------------------------------------------------------------------
 
-    def test_gaming_full_pipeline(self):
-        """Test gaming behavior detection pipeline."""
-        analyzer = GamingBehaviorAnalyzer()
-        blocker = ActionBlocker()
+class TestDetectionRate:
+    """Verify the system meets the 85%+ detection requirement."""
 
-        now = datetime.now()
-        player_id = 'bot_player'
+    _ATTACKS = [
+        # (domain, action_type, params)
+        (Domain.FINANCIAL_TRADING, "place_order", {"front_run": True}),
+        (Domain.FINANCIAL_TRADING, "place_order", {"cancel_ratio": 0.95}),
+        (Domain.FINANCIAL_TRADING, "place_order", {"pump_and_dump": True}),
+        (Domain.FINANCIAL_TRADING, "place_order", {"is_wash_trade": True}),
+        (Domain.FINANCIAL_TRADING, "place_order", {"uses_non_public_info": True}),
+        (Domain.FINANCIAL_TRADING, "place_order", {"involves_price_agreement": True}),
+        (Domain.FINANCIAL_TRADING, "place_order", {"order_rate_per_sec": 600}),
+        (Domain.GAMING, "game", {"match_outcome_predetermined": True}),
+        (Domain.GAMING, "game", {"uses_unauthorized_software": True}),
+        (Domain.GAMING, "game", {"actions_per_minute": 500}),
+        (Domain.GAMING, "game", {"coordinated_with": ["x", "y"]}),
+        (Domain.GAMING, "game", {"accounts_controlled": 3}),
+        (Domain.BUSINESS, "action", {"involves_fraud": True}),
+        (Domain.BUSINESS, "action", {"involves_bribery": True}),
+        (Domain.BUSINESS, "action", {"involves_money_laundering": True}),
+        (Domain.BUSINESS, "action", {"child_labor": True}),
+        (Domain.BUSINESS, "action", {"anti_competitive": True}),
+        (Domain.HEALTHCARE, "claim", {"phantom_billing": True}),
+        (Domain.HEALTHCARE, "claim", {"billing_upcoding": True}),
+        (Domain.HEALTHCARE, "claim", {"patient_coerced": True}),
+        (Domain.HEALTHCARE, "claim", {"phi_accessed_without_auth": True}),
+        (Domain.HEALTHCARE, "claim", {"kickback_received": True}),
+        (Domain.SOCIAL_PLATFORM, "post", {"is_deepfake": True}),
+        (Domain.SOCIAL_PLATFORM, "post", {"involves_minors_sexually": True}),
+        (Domain.SOCIAL_PLATFORM, "post", {"vote_manipulation": True}),
+        (Domain.SOCIAL_PLATFORM, "post", {"incites_violence": True}),
+        (Domain.SOCIAL_PLATFORM, "post", {"contains_misinformation": True}),
+    ]
 
-        results = []
-        for i in range(8):
-            action = {
-                'action_type': 'attack',
-                'location': 'zone_1',
-                'timestamp': now + timedelta(milliseconds=i * 30)  # 30ms gaps = botting
-            }
-            threat = analyzer.analyze_player_action(player_id, action)
-            decision = blocker.evaluate_and_block(action, threat)
-            results.append((threat, decision))
+    def test_detection_rate_meets_requirement(self, pipeline):
+        blocked = 0
+        for i, (domain, action_type, params) in enumerate(self._ATTACKS):
+            action = Action(
+                action_id=f"attack-{i}",
+                domain=domain,
+                action_type=action_type,
+                parameters=params,
+                actor_id=f"attacker-{i}",
+            )
+            result = pipeline.evaluate(action)
+            if not result.allowed:
+                blocked += 1
 
-        # Eventually should detect botting
-        final_threat, final_decision = results[-1]
-        assert final_threat.threat_level in (ThreatLevel.HIGH, ThreatLevel.MEDIUM)
+        detection_rate = blocked / len(self._ATTACKS)
+        assert detection_rate >= 0.85, (
+            f"Detection rate {detection_rate:.1%} is below the required 85%."
+        )
 
-    def test_ethics_classifier_integration(self):
-        """Test ethics classifier with various domains."""
-        classifier = EthicsClassifier()
-
-        # Financial domain
-        financial_action = {
-            'domain': 'FINANCIAL',
-            'action_type': 'standard_trade',
-            'transparent': True
-        }
-        result = classifier.classify(financial_action)
-        assert result.is_ethical == True
-
-        # Unethical action
-        unethical_action = {
-            'domain': 'BUSINESS',
-            'action_type': 'contract',
-            'contains_fraud': True,
-            'deceptive': True
-        }
-        result2 = classifier.classify(unethical_action)
-        assert result2.is_ethical == False
-
-    def test_constraint_enforcement_integration(self):
-        """Test constraint enforcement across domains."""
-        enforcer = ConstraintEnforcer()
-
-        # Add financial constraints
-        enforcer.add_constraint('financial', Constraint(
-            name='max_trade',
-            domain='financial',
-            constraint_type='amount_limit',
-            parameters={'max_amount': 50000}
-        ))
-
-        # Compliant action
-        action1 = {'domain': 'financial', 'action_type': 'trade', 'amount': 10000}
-        result1 = enforcer.enforce(action1)
-        assert result1.is_compliant == True
-
-        # Violating action
-        action2 = {'domain': 'financial', 'action_type': 'trade', 'amount': 100000}
-        result2 = enforcer.enforce(action2)
-        assert result2.is_compliant == False
-
-    def test_audit_compliance_report(self):
-        """Test audit logger produces valid compliance report."""
-        logger = AuditLogger()
-
-        for i in range(10):
-            logger.log_decision({
-                'decision_id': f'd{i}',
-                'action_type': 'trade' if i % 2 == 0 else 'block',
-                'severity': 'HIGH' if i > 7 else 'LOW',
-                'domain': 'FINANCIAL'
-            })
-
-        trail = logger.get_audit_trail()
-        assert len(trail) == 10
-
-        report = logger.export_compliance_report()
-        assert isinstance(report, dict)
-        assert 'total_decisions' in report or len(report) > 0
-
-        # Filter by domain
-        filtered = logger.get_audit_trail({'domain': 'FINANCIAL'})
-        assert len(filtered) == 10
+    def test_false_positive_rate_below_five_percent(self, pipeline):
+        """Clean actions should not be blocked."""
+        clean_actions = [
+            Action(
+                action_id=f"clean-{i}",
+                domain=domain,
+                action_type=action_type,
+                parameters=params,
+                actor_id="clean-actor",
+            )
+            for i, (domain, action_type, params) in enumerate(
+                [
+                    (Domain.FINANCIAL_TRADING, "place_limit_order", {"side": "buy", "price": 99.0, "quantity": 10}),
+                    (Domain.GAMING, "game_action", {"actions_per_minute": 100}),
+                    (Domain.BUSINESS, "submit_invoice", {"amount": 200}),
+                    (Domain.HEALTHCARE, "submit_lab_result", {"test": "CBC"}),
+                    (Domain.SOCIAL_PLATFORM, "submit_post", {"text": "Good morning!"}),
+                    (Domain.FINANCIAL_TRADING, "place_limit_order", {"side": "sell", "price": 101.0, "quantity": 5}),
+                    (Domain.GAMING, "game_action", {"actions_per_minute": 200, "win_rate": 0.50}),
+                    (Domain.BUSINESS, "hire_employee", {"role": "engineer", "salary": 90000}),
+                    (Domain.HEALTHCARE, "book_appointment", {"specialty": "cardiology"}),
+                    (Domain.SOCIAL_PLATFORM, "submit_post", {"text": "Great article!"}),
+                ]
+            )
+        ]
+        blocked = sum(1 for a in clean_actions if not pipeline.evaluate(a).allowed)
+        fp_rate = blocked / len(clean_actions)
+        assert fp_rate < 0.05, f"False positive rate {fp_rate:.1%} exceeds 5%."
