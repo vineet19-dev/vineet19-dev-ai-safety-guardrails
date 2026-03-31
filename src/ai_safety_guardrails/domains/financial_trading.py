@@ -109,7 +109,8 @@ class FinancialTradingMonitor:
                 avg_baseline = sorted_amounts[0]
 
             for order in orders:
-                if avg_baseline > 0 and order.get('amount', 0) > 10 * avg_baseline and order.get('cancelled_within_seconds', 999) <= 5:
+                cancelled_secs = order.get('cancelled_within_seconds')
+                if avg_baseline > 0 and order.get('amount', 0) > 10 * avg_baseline and cancelled_secs is not None and cancelled_secs <= 5:
                     threats.append(('spoofing', 0.85, 'HIGH'))
                     break
 
