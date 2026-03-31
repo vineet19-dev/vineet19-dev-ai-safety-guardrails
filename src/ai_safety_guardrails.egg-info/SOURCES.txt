@@ -26,6 +26,7 @@ src/ai_safety_guardrails/prevention/__init__.py
 src/ai_safety_guardrails/prevention/action_blocker.py
 src/ai_safety_guardrails/prevention/constraint_enforcer.py
 src/guardrails/__init__.py
+src/guardrails/api.py
 src/guardrails/audit_logger.py
 src/guardrails/behavior_monitor.py
 src/guardrails/ethical_framework.py

@@ -376,80 +376,342 @@ def get_frontend_html() -> str:
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>AI Safety Guardrails Dashboard</title>
+        <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
         <style>
             * { margin: 0; padding: 0; box-sizing: border-box; }
+
+            @keyframes fadeIn {
+                from { opacity: 0; transform: translateY(10px); }
+                to { opacity: 1; transform: translateY(0); }
+            }
+
+            @keyframes slideIn {
+                from { opacity: 0; transform: translateX(-20px); }
+                to { opacity: 1; transform: translateX(0); }
+            }
+
+            @keyframes pulse {
+                0%, 100% { opacity: 1; }
+                50% { opacity: 0.5; }
+            }
+
+            @keyframes shimmer {
+                0% { background-position: -1000px 0; }
+                100% { background-position: 1000px 0; }
+            }
+
             body {
                 font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-                background: #0f0f23;
+                background: linear-gradient(135deg, #0f0f23 0%, #1a1a2e 100%);
                 color: #e0e0e0;
                 line-height: 1.6;
+                min-height: 100vh;
             }
-            .container { max-width: 1400px; margin: 0 auto; padding: 2rem; }
-            header { text-align: center; margin-bottom: 3rem; }
-            h1 { color: #60a5fa; font-size: 2.5rem; margin-bottom: 0.5rem; }
-            .subtitle { color: #9ca3af; font-size: 1.1rem; }
-            .dashboard { display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; }
-            @media (max-width: 1024px) { .dashboard { grid-template-columns: 1fr; } }
+
+            .container {
+                max-width: 1400px;
+                margin: 0 auto;
+                padding: 2rem;
+                animation: fadeIn 0.6s ease-out;
+            }
+
+            header {
+                text-align: center;
+                margin-bottom: 3rem;
+                animation: fadeIn 0.8s ease-out;
+            }
+
+            h1 {
+                background: linear-gradient(135deg, #60a5fa 0%, #a855f7 100%);
+                -webkit-background-clip: text;
+                -webkit-text-fill-color: transparent;
+                background-clip: text;
+                font-size: 2.8rem;
+                margin-bottom: 0.5rem;
+                font-weight: 800;
+                letter-spacing: -0.5px;
+            }
+
+            .subtitle {
+                color: #9ca3af;
+                font-size: 1.1rem;
+                font-weight: 300;
+            }
+
+            .dashboard {
+                display: grid;
+                grid-template-columns: 1fr 1fr;
+                gap: 2rem;
+            }
+
+            @media (max-width: 1024px) {
+                .dashboard { grid-template-columns: 1fr; }
+            }
+
             .card {
-                background: #1a1a2e;
-                border-radius: 12px;
+                background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+                border-radius: 16px;
                 padding: 1.5rem;
-                box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
-                border: 1px solid #2d2d44;
+                box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+                border: 1px solid rgba(96, 165, 250, 0.1);
+                transition: all 0.3s ease;
+                animation: slideIn 0.6s ease-out;
+                position: relative;
+                overflow: hidden;
             }
-            .card h2 { color: #60a5fa; margin-bottom: 1rem; font-size: 1.5rem; }
+
+            .card::before {
+                content: '';
+                position: absolute;
+                top: 0;
+                left: -100%;
+                width: 100%;
+                height: 100%;
+                background: linear-gradient(90deg, transparent, rgba(96, 165, 250, 0.1), transparent);
+                transition: left 0.5s;
+            }
+
+            .card:hover {
+                transform: translateY(-4px);
+                box-shadow: 0 12px 48px rgba(96, 165, 250, 0.2);
+                border-color: rgba(96, 165, 250, 0.3);
+            }
+
+            .card:hover::before {
+                left: 100%;
+            }
+
+            .card h2 {
+                color: #60a5fa;
+                margin-bottom: 1rem;
+                font-size: 1.5rem;
+                font-weight: 700;
+            }
+
             .input-group { margin-bottom: 1rem; }
-            label { display: block; color: #9ca3af; margin-bottom: 0.5rem; font-size: 0.9rem; }
+
+            label {
+                display: block;
+                color: #9ca3af;
+                margin-bottom: 0.5rem;
+                font-size: 0.9rem;
+                font-weight: 500;
+            }
+
             input, select, textarea {
                 width: 100%;
                 padding: 0.75rem;
-                background: #0f0f23;
+                background: rgba(15, 15, 35, 0.8);
                 border: 1px solid #2d2d44;
-                border-radius: 6px;
+                border-radius: 8px;
                 color: #e0e0e0;
                 font-size: 1rem;
+                transition: all 0.3s ease;
             }
-            textarea { min-height: 100px; font-family: 'Courier New', monospace; }
+
+            input:focus, select:focus, textarea:focus {
+                outline: none;
+                border-color: #60a5fa;
+                box-shadow: 0 0 0 3px rgba(96, 165, 250, 0.1);
+            }
+
+            textarea {
+                min-height: 100px;
+                font-family: 'Courier New', monospace;
+                resize: vertical;
+            }
+
             button {
-                background: #3b82f6;
+                background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
                 color: white;
                 border: none;
                 padding: 0.75rem 1.5rem;
-                border-radius: 6px;
+                border-radius: 8px;
                 cursor: pointer;
                 font-size: 1rem;
                 font-weight: 600;
-                transition: background 0.2s;
+                transition: all 0.3s ease;
                 margin-right: 0.5rem;
                 margin-top: 0.5rem;
+                position: relative;
+                overflow: hidden;
             }
-            button:hover { background: #2563eb; }
-            .demo-buttons { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 1rem; }
-            .demo-btn { background: #6366f1; font-size: 0.9rem; padding: 0.6rem 1rem; }
-            .demo-btn:hover { background: #4f46e5; }
+
+            button::after {
+                content: '';
+                position: absolute;
+                top: 50%;
+                left: 50%;
+                width: 0;
+                height: 0;
+                border-radius: 50%;
+                background: rgba(255, 255, 255, 0.3);
+                transform: translate(-50%, -50%);
+                transition: width 0.6s, height 0.6s;
+            }
+
+            button:hover::after {
+                width: 300px;
+                height: 300px;
+            }
+
+            button:hover {
+                transform: translateY(-2px);
+                box-shadow: 0 4px 12px rgba(59, 130, 246, 0.4);
+            }
+
+            button:active {
+                transform: translateY(0);
+            }
+
+            .demo-buttons {
+                display: flex;
+                flex-wrap: wrap;
+                gap: 0.5rem;
+                margin-top: 1rem;
+            }
+
+            .demo-btn {
+                background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
+                font-size: 0.9rem;
+                padding: 0.6rem 1rem;
+            }
+
             .result-card {
                 margin-top: 1rem;
                 padding: 1.5rem;
-                border-radius: 8px;
+                border-radius: 12px;
                 border-left: 4px solid;
+                animation: fadeIn 0.5s ease-out;
+                backdrop-filter: blur(10px);
             }
-            .result-ALLOW { background: #064e3b; border-color: #10b981; }
-            .result-WARN { background: #78350f; border-color: #f59e0b; }
-            .result-BLOCK { background: #7f1d1d; border-color: #ef4444; }
-            .result-ESCALATE { background: #581c87; border-color: #a855f7; }
-            .result-label { font-weight: 600; font-size: 1.2rem; margin-bottom: 0.5rem; }
+
+            .result-ALLOW {
+                background: linear-gradient(135deg, rgba(6, 78, 59, 0.6) 0%, rgba(4, 120, 87, 0.4) 100%);
+                border-color: #10b981;
+            }
+
+            .result-WARN {
+                background: linear-gradient(135deg, rgba(120, 53, 15, 0.6) 0%, rgba(217, 119, 6, 0.4) 100%);
+                border-color: #f59e0b;
+            }
+
+            .result-BLOCK {
+                background: linear-gradient(135deg, rgba(127, 29, 29, 0.6) 0%, rgba(185, 28, 28, 0.4) 100%);
+                border-color: #ef4444;
+            }
+
+            .result-ESCALATE {
+                background: linear-gradient(135deg, rgba(88, 28, 135, 0.6) 0%, rgba(126, 34, 206, 0.4) 100%);
+                border-color: #a855f7;
+            }
+
+            .result-label {
+                font-weight: 700;
+                font-size: 1.3rem;
+                margin-bottom: 0.5rem;
+                text-transform: uppercase;
+                letter-spacing: 0.5px;
+            }
+
             .result-row { margin: 0.5rem 0; }
             .result-row strong { color: #9ca3af; }
-            .logs-panel { max-height: 400px; overflow-y: auto; }
+
+            .logs-panel {
+                max-height: 400px;
+                overflow-y: auto;
+                scrollbar-width: thin;
+                scrollbar-color: #60a5fa #1a1a2e;
+            }
+
+            .logs-panel::-webkit-scrollbar {
+                width: 8px;
+            }
+
+            .logs-panel::-webkit-scrollbar-track {
+                background: #1a1a2e;
+                border-radius: 4px;
+            }
+
+            .logs-panel::-webkit-scrollbar-thumb {
+                background: #60a5fa;
+                border-radius: 4px;
+            }
+
             .log-entry {
                 padding: 0.75rem;
-                border-bottom: 1px solid #2d2d44;
+                border-bottom: 1px solid rgba(45, 45, 68, 0.5);
                 font-size: 0.9rem;
+                animation: slideIn 0.3s ease-out;
+                transition: background 0.2s ease;
             }
+
+            .log-entry:hover {
+                background: rgba(96, 165, 250, 0.05);
+            }
+
             .log-entry:last-child { border-bottom: none; }
-            .chart-container { height: 300px; margin-top: 1rem; }
-            .loading { text-align: center; color: #60a5fa; padding: 2rem; }
+
+            .chart-container {
+                height: 300px;
+                margin-top: 1rem;
+                position: relative;
+            }
+
+            .loading {
+                text-align: center;
+                color: #60a5fa;
+                padding: 2rem;
+                animation: pulse 2s infinite;
+            }
+
+            .spinner {
+                display: inline-block;
+                width: 40px;
+                height: 40px;
+                border: 4px solid rgba(96, 165, 250, 0.2);
+                border-top-color: #60a5fa;
+                border-radius: 50%;
+                animation: spin 1s linear infinite;
+            }
+
+            @keyframes spin {
+                to { transform: rotate(360deg); }
+            }
+
             .full-width { grid-column: 1 / -1; }
+
+            .live-indicator {
+                display: inline-block;
+                width: 8px;
+                height: 8px;
+                background: #10b981;
+                border-radius: 50%;
+                margin-right: 0.5rem;
+                animation: pulse 2s infinite;
+            }
+
+            .stat-card {
+                background: rgba(96, 165, 250, 0.1);
+                padding: 1rem;
+                border-radius: 8px;
+                margin-bottom: 1rem;
+                border: 1px solid rgba(96, 165, 250, 0.2);
+            }
+
+            .stat-number {
+                font-size: 2rem;
+                font-weight: 700;
+                color: #60a5fa;
+                margin-bottom: 0.25rem;
+            }
+
+            .stat-label {
+                color: #9ca3af;
+                font-size: 0.9rem;
+                text-transform: uppercase;
+                letter-spacing: 0.5px;
+            }
         </style>
     </head>
     <body>
@@ -503,9 +765,40 @@ def get_frontend_html() -> str:
 
                 <!-- Live Logs Section -->
                 <div class="card full-width">
-                    <h2>Live Action Logs</h2>
+                    <h2><span class="live-indicator"></span>Live Action Logs</h2>
                     <div class="logs-panel" id="logs">
-                        <p class="loading">Loading logs...</p>
+                        <p class="loading"><div class="spinner"></div></p>
+                    </div>
+                </div>
+
+                <!-- Statistics Section -->
+                <div class="card full-width">
+                    <h2>📊 Statistics Dashboard</h2>
+                    <div id="stats-summary" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-bottom: 1.5rem;">
+                        <div class="stat-card">
+                            <div class="stat-number" id="stat-total">0</div>
+                            <div class="stat-label">Total Evaluations</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-number" id="stat-blocked" style="color: #ef4444;">0</div>
+                            <div class="stat-label">Blocked Actions</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-number" id="stat-allowed" style="color: #10b981;">0</div>
+                            <div class="stat-label">Allowed Actions</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-number" id="stat-warn" style="color: #f59e0b;">0</div>
+                            <div class="stat-label">Warnings</div>
+                        </div>
+                    </div>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem;">
+                        <div class="chart-container">
+                            <canvas id="decisionChart"></canvas>
+                        </div>
+                        <div class="chart-container">
+                            <canvas id="domainChart"></canvas>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -513,6 +806,8 @@ def get_frontend_html() -> str:
 
         <script>
             let demoActions = [];
+            let decisionChart = null;
+            let domainChart = null;
 
             // Load demo actions on page load
             async function loadDemoActions() {
@@ -647,10 +942,138 @@ def get_frontend_html() -> str:
                 }
             }
 
+            // Load and update statistics
+            async function loadStats() {
+                try {
+                    const response = await fetch('/api/stats');
+                    const data = await response.json();
+
+                    // Update stat cards
+                    document.getElementById('stat-total').textContent = data.total_evaluations;
+
+                    const decisions = data.decision_distribution || {};
+                    const blocked = (decisions.BLOCK || 0) + (decisions.ESCALATE || 0);
+                    const allowed = decisions.ALLOW || 0;
+                    const warned = decisions.WARN || 0;
+
+                    document.getElementById('stat-blocked').textContent = blocked;
+                    document.getElementById('stat-allowed').textContent = allowed;
+                    document.getElementById('stat-warn').textContent = warned;
+
+                    // Update decision chart
+                    const decisionLabels = Object.keys(decisions);
+                    const decisionData = Object.values(decisions);
+                    const decisionColors = decisionLabels.map(label => {
+                        switch(label) {
+                            case 'ALLOW': return '#10b981';
+                            case 'WARN': return '#f59e0b';
+                            case 'BLOCK': return '#ef4444';
+                            case 'ESCALATE': return '#a855f7';
+                            default: return '#60a5fa';
+                        }
+                    });
+
+                    if (decisionChart) {
+                        decisionChart.data.labels = decisionLabels;
+                        decisionChart.data.datasets[0].data = decisionData;
+                        decisionChart.data.datasets[0].backgroundColor = decisionColors;
+                        decisionChart.update();
+                    } else {
+                        const ctx1 = document.getElementById('decisionChart').getContext('2d');
+                        decisionChart = new Chart(ctx1, {
+                            type: 'doughnut',
+                            data: {
+                                labels: decisionLabels,
+                                datasets: [{
+                                    data: decisionData,
+                                    backgroundColor: decisionColors,
+                                    borderColor: '#1a1a2e',
+                                    borderWidth: 2
+                                }]
+                            },
+                            options: {
+                                responsive: true,
+                                maintainAspectRatio: false,
+                                plugins: {
+                                    legend: {
+                                        position: 'bottom',
+                                        labels: { color: '#9ca3af', padding: 15, font: { size: 12 } }
+                                    },
+                                    title: {
+                                        display: true,
+                                        text: 'Decision Distribution',
+                                        color: '#60a5fa',
+                                        font: { size: 16, weight: 'bold' }
+                                    }
+                                }
+                            }
+                        });
+                    }
+
+                    // Update domain chart
+                    const domains = data.domain_distribution || {};
+                    const domainLabels = Object.keys(domains);
+                    const domainData = Object.values(domains);
+
+                    if (domainChart) {
+                        domainChart.data.labels = domainLabels;
+                        domainChart.data.datasets[0].data = domainData;
+                        domainChart.update();
+                    } else {
+                        const ctx2 = document.getElementById('domainChart').getContext('2d');
+                        domainChart = new Chart(ctx2, {
+                            type: 'bar',
+                            data: {
+                                labels: domainLabels,
+                                datasets: [{
+                                    label: 'Evaluations',
+                                    data: domainData,
+                                    backgroundColor: 'rgba(96, 165, 250, 0.6)',
+                                    borderColor: '#60a5fa',
+                                    borderWidth: 2
+                                }]
+                            },
+                            options: {
+                                responsive: true,
+                                maintainAspectRatio: false,
+                                plugins: {
+                                    legend: {
+                                        display: false
+                                    },
+                                    title: {
+                                        display: true,
+                                        text: 'Domain Distribution',
+                                        color: '#60a5fa',
+                                        font: { size: 16, weight: 'bold' }
+                                    }
+                                },
+                                scales: {
+                                    y: {
+                                        beginAtZero: true,
+                                        ticks: { color: '#9ca3af' },
+                                        grid: { color: 'rgba(96, 165, 250, 0.1)' }
+                                    },
+                                    x: {
+                                        ticks: { color: '#9ca3af' },
+                                        grid: { display: false }
+                                    }
+                                }
+                            }
+                        });
+                    }
+                } catch (error) {
+                    console.error('Error loading stats:', error);
+                }
+            }
+
             // Initialize
             loadDemoActions();
             loadLogs();
-            setInterval(loadLogs, 5000); // Refresh logs every 5 seconds
+            loadStats();
+            setInterval(() => {
+                loadLogs();
+                loadStats();
+            }, 5000); // Refresh every 5 seconds
         </script>
     </body>
     </html>
