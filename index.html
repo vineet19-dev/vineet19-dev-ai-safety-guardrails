@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>AI Safety Guardrails</title>
+  <style>
+    body { background: #0f172a; color: white; font-family: Arial; text-align: center; }
+    input, button { padding: 10px; margin: 10px; }
+    .result { margin-top: 20px; font-size: 20px; }
+  </style>
+</head>
+<body>
+
+<h1>AI Safety Guardrails</h1>
+
+<input id="input" placeholder="Enter AI action..." size="40"/>
+<br>
+<button onclick="run()">Run Safety Check</button>
+
+<div class="result" id="output"></div>
+
+<script>
+async function run() {
+  const text = document.getElementById("input").value;
+
+  const res = await fetch("http://localhost:8000/evaluate", {
+    method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({ action: text })
+  });
+
+  const data = await res.json();
+
+  document.getElementById("output").innerHTML =
+    `Decision: ${data.decision} <br>
+     Domain: ${data.domain} <br>
+     Reason: ${data.reason}`;
+}
+</script>
+
+</body>
+</html>
