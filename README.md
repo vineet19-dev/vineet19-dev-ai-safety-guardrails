@@ -126,8 +126,9 @@ Then open **http://localhost:8000** in your browser.
 
 The modern web dashboard includes:
 
-- **🎨 Dark Theme UI** - Professional dark mode interface
-- **🔍 Safety Check** - Evaluate AI actions in real-time
+- **🎨 Modern Dark Theme UI** - Professional gradient-based interface with smooth animations
+- **✨ Smooth Animations** - Fade-in, slide-in, and pulse effects throughout
+- **🔍 Safety Check** - Evaluate AI actions in real-time with instant feedback
 - **🎯 Pre-built Test Cases** - Quick buttons for common attack scenarios:
   - 💰 Financial Fraud (Pump & Dump)
   - 🎮 Game Exploit (Botting)
@@ -135,9 +136,14 @@ The modern web dashboard includes:
   - 🏥 Healthcare Fraud
   - 📊 Insider Trading
   - ✅ Clean Action (baseline)
-- **📊 Live Logs Panel** - Real-time action evaluation history
+- **📊 Live Logs Panel** - Real-time action evaluation history with pulse indicator
+- **📈 Live Statistics Dashboard** - Auto-refreshing charts and metrics:
+  - Real-time stat cards (Total, Blocked, Allowed, Warnings)
+  - Doughnut chart for decision distribution
+  - Bar chart for domain distribution
+  - Updates every 5 seconds automatically
 - **🎬 Demo Mode** - Simulate multiple AI actions automatically
-- **📈 Statistics** - Decision and domain distribution (via API)
+- **💫 Interactive Elements** - Card hover effects, button ripples, smooth transitions
 
 ### API Endpoints
 
