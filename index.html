@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Safety Guardrails</title>
+
+<style>
+body {
+  margin: 0;
+  font-family: Arial, sans-serif;
+  background: #0f172a;
+  color: white;
+  text-align: center;
+}
+
+h1 {
+  margin-top: 20px;
+}
+
+.container {
+  max-width: 900px;
+  margin: auto;
+  padding: 20px;
+}
+
+input {
+  width: 70%;
+  padding: 12px;
+  border-radius: 8px;
+  border: none;
+  margin: 10px;
+}
+
+button {
+  padding: 10px 15px;
+  border: none;
+  border-radius: 8px;
+  margin: 5px;
+  cursor: pointer;
+  font-weight: bold;
+}
+
+.run { background: #2563eb; color: white; }
+.demo { background: #9333ea; color: white; }
+
+.card {
+  background: #1e293b;
+  margin-top: 20px;
+  padding: 20px;
+  border-radius: 12px;
+}
+
+.green { color: #22c55e; }
+.yellow { color: #facc15; }
+.red { color: #ef4444; }
+.purple { color: #a855f7; }
+
+.logs {
+  margin-top: 20px;
+  text-align: left;
+  background: #020617;
+  padding: 10px;
+  height: 200px;
+  overflow-y: auto;
+  border-radius: 10px;
+}
+
+.test-buttons button {
+  background: #334155;
+  color: white;
+}
+</style>
+</head>
+
+<body>
+
+<h1>🚀 AI Safety Guardrails Dashboard</h1>
+
+<div class="container">
+
+<input id="input" placeholder="Enter AI action...">
+<br>
+
+<button class="run" onclick="runCheck()">Run Safety Check</button>
+<button class="demo" onclick="runDemo()">Demo Mode</button>
+
+<div class="test-buttons">
+  <button onclick="fill('Pump and dump crypto scheme')">💰 Financial Fraud</button>
+  <button onclick="fill('Exploit game bug to duplicate items')">🎮 Game Exploit</button>
+  <button onclick="fill('Generate deepfake video of politician')">🌐 Deepfake</button>
+  <button onclick="fill('Fake medical billing fraud')">🏥 Healthcare Fraud</button>
+</div>
+
+<div class="card" id="result">
+  <h2>Result will appear here</h2>
+</div>
+
+<div class="logs" id="logs">
+  <b>Live Logs:</b><br>
+</div>
+
+</div>
+
+<script>
+
+function fill(text) {
+  document.getElementById("input").value = text;
+}
+
+function getColor(decision) {
+  if (decision === "ALLOW") return "green";
+  if (decision === "WARN") return "yellow";
+  if (decision === "BLOCK") return "red";
+  return "purple";
+}
+
+function fakeBackend(input) {
+  if (input.includes("pump") || input.includes("crypto"))
+    return {decision:"BLOCK", domain:"financial_trading", reason:"Pump & Dump detected", confidence:0.95};
+
+  if (input.includes("deepfake"))
+    return {decision:"ESCALATE", domain:"platform_safety", reason:"Deepfake / misinformation", confidence:0.93};
+
+  if (input.includes("game") || input.includes("exploit"))
+    return {decision:"BLOCK", domain:"gaming", reason:"Exploit detected", confidence:0.90};
+
+  if (input.includes("medical"))
+    return {decision:"BLOCK", domain:"healthcare", reason:"Fraud detected", confidence:0.92};
+
+  return {decision:"ALLOW", domain:"general", reason:"No issue detected", confidence:0.80};
+}
+
+function runCheck() {
+  const input = document.getElementById("input").value;
+
+  // Replace this with real API later
+  const data = fakeBackend(input);
+
+  const color = getColor(data.decision);
+
+  document.getElementById("result").innerHTML = `
+    <h2 class="${color}">${data.decision}</h2>
+    <p><b>Domain:</b> ${data.domain}</p>
+    <p><b>Confidence:</b> ${(data.confidence * 100).toFixed(1)}%</p>
+    <p><b>Reason:</b> ${data.reason}</p>
+  `;
+
+  const time = new Date().toLocaleTimeString();
+
+  document.getElementById("logs").innerHTML += `
+    [${time}] ${input} → <span class="${color}">${data.decision}</span><br>
+  `;
+}
+
+function runDemo() {
+  const scenarios = [
+    "Pump and dump crypto scheme",
+    "Normal stock purchase",
+    "Generate deepfake video",
+    "Exploit game bug",
+    "Regular login"
+  ];
+
+  let i = 0;
+
+  const interval = setInterval(() => {
+    if (i >= scenarios.length) {
+      clearInterval(interval);
+      return;
+    }
+
+    document.getElementById("input").value = scenarios[i];
+    runCheck();
+    i++;
+  }, 1500);
+}
+
+</script>
+
+</body>
+</html>
