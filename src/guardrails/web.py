@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 from dataclasses import asdict
 from enum import Enum
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -13,6 +14,7 @@ from .ethical_framework import Action, Domain
 from .pipeline import SafetyPipeline
 
 _MAX_BODY_BYTES = 1024 * 1024
+_LOGGER = logging.getLogger(__name__)
 
 _INDEX_HTML = """<!doctype html>
 <html lang="en">
@@ -50,7 +52,7 @@ _INDEX_HTML = """<!doctype html>
     </label>
     <label>Action Type <input id="action_type" value="place_order" required /></label>
     <label>Parameters (JSON object)
-      <textarea id="parameters">{ "front_run": true }</textarea>
+      <textarea id="parameters">{ "front_running": true }</textarea>
     </label>
     <button type="submit">Evaluate</button>
   </form>
@@ -155,7 +157,7 @@ def evaluate_payload(payload: dict[str, Any], pipeline: SafetyPipeline) -> dict[
     return _json_safe(asdict(result))
 
 
-def create_handler(pipeline: SafetyPipeline):
+def create_handler(pipeline: SafetyPipeline) -> type[BaseHTTPRequestHandler]:
     class GuardrailsRequestHandler(BaseHTTPRequestHandler):
         def _send_json(self, status_code: int, body: dict[str, Any]) -> None:
             raw = json.dumps(body).encode("utf-8")
@@ -205,7 +207,8 @@ def create_handler(pipeline: SafetyPipeline):
                 self._send_json(200, evaluation)
             except (json.JSONDecodeError, UnicodeDecodeError, ValueError) as exc:
                 self._send_json(400, {"error": str(exc)})
-            except Exception:  # pragma: no cover
+            except Exception as exc:  # pragma: no cover
+                _LOGGER.exception("Unhandled error while evaluating request: %s", exc)
                 self._send_json(500, {"error": "Internal server error."})
 
     return GuardrailsRequestHandler

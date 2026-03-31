@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import pytest
+
 from guardrails.ethical_framework import Domain
 from guardrails.pipeline import SafetyPipeline
 from guardrails.web import build_action_from_payload, evaluate_payload
@@ -24,7 +26,7 @@ def test_build_action_from_payload_parses_domain_and_fields():
 
 
 def test_build_action_from_payload_rejects_invalid_domain():
-    try:
+    with pytest.raises(ValueError, match="Invalid domain"):
         build_action_from_payload(
             {
                 "action_id": "web-002",
@@ -33,9 +35,6 @@ def test_build_action_from_payload_rejects_invalid_domain():
                 "action_type": "do_thing",
             }
         )
-        assert False, "Expected ValueError for invalid domain"
-    except ValueError as exc:
-        assert "Invalid domain" in str(exc)
 
 
 def test_evaluate_payload_returns_json_safe_result():
